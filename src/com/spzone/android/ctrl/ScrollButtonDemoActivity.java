@@ -46,11 +46,6 @@ public class ScrollButtonDemoActivity extends Activity implements OnButtonSwitch
 			Toast.makeText(this, "Left", Toast.LENGTH_SHORT).show();
 		}else{
 			Toast.makeText(this, "Right", Toast.LENGTH_SHORT).show();
-		}
-		
-	}
-    
-    
-    
-    
+		}		
+	}    
 }
