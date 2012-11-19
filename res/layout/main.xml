@@ -9,13 +9,17 @@
         android:layout_width="fill_parent"
         android:layout_height="wrap_content"
         android:text="@string/hello" />
+
     <com.spzone.android.ctrl.ScrollButton
         android:id="@+id/scroll_button"
-        app:leftText="分时"
-        app:rightText="K线"       
-        app:textColor="@color/white"   
-        app:textSize="26sp"    
-        android:layout_width="280dip"
-        android:layout_height="50dip"/>
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
         
+        app:leftText="Kline"
+        app:rightText="Tline"
+        app:selectedBkgColor="@color/blueviolet"
+        app:initSidePosition="1"
+        app:textColor="@color/white"
+        app:textSize="22sp" />
+
 </LinearLayout>

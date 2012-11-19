@@ -21,289 +21,394 @@ import android.content.res.TypedArray;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
-import android.graphics.Paint.FontMetricsInt;
 import android.graphics.Paint.Style;
 import android.graphics.RectF;
 import android.util.AttributeSet;
+import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
 
 public class ScrollButton extends View {
-	private static final int LEFT = 0;
-	private static final int RIGHT = 1;
-	public interface OnButtonSwitched{
-		/**
-		 * @param sideId 0 for LEFT, 1 for RIGHT
-		 */
-		public void onSwitch(int sideId);
-	}
-	
-	private RectF mBound, mActiveBound;
-	private Paint mBkgPaint;
-	private float mRoundRadio = 0.0f;
-	private float mRoundInnerRadio = 0.0f;
+    private static final int LEFT = 0;
 
-	// the horizontal max distance which tells us whether the active block
-	// needs to move to the other side finally
-	private float mMaxDistToSwitch = 0.0f;
-	private Paint mSlideBoardPaint;
-	private Paint mTextPaint;
+    private static final int RIGHT = 1;
 
-	private int mTextBkgColor = 0xFFFF0000;
-	private int mTextColor = 0xFF000000;
-	private int mTextSize = 26;
-	
-	private String mLeftText =  "Tline";
-	private String mRightText = "Kline";
+    /***
+     * The interface to notify other observers the state changed
+     */
+    public interface OnButtonSwitched {
+        /**
+         * @param sideId 0 for LEFT, 1 for RIGHT
+         */
+        public void onSwitch(int sideId);
+    }
 
-	// We can be in one of these states
-	static final int NONE = 0;
-	static final int PRESSED= 1;
-	static final int MOVE = 2;
-	int mode = NONE;
+    private RectF mBound, mActiveBound;
 
-	private boolean leftSidePressed = false;
-	private boolean textSwitched = false;
-	private float mStartX = 0;	
-	public OnButtonSwitched mListener ;
-	
-	public ScrollButton(Context context) {
-		super(context);
-		initComponents();
-	}
+    private Paint mBkgPaint;
 
-	public ScrollButton(Context context, AttributeSet attrs) {
-		super(context, attrs);
-		initComponents();
-		
-		TypedArray a = context.obtainStyledAttributes(attrs,
-				R.styleable.ScrollButton);
+    private float mRoundRadio = 0.0f;
 
-		CharSequence s = a.getString(R.styleable.ScrollButton_leftText);
-		if (s != null) {
-			mLeftText = s.toString();
-		}
-		
-		CharSequence t = a.getString(R.styleable.ScrollButton_rightText);
-		if(t != null){
-			mRightText = t.toString();
-		}
+    private float mRoundInnerRadio = 0.0f;
 
-		// Retrieve the color(s) to be used for this view and apply them.
-		mTextColor = (a.getColor(R.styleable.ScrollButton_textColor, 0xFF000000));
-		mTextPaint.setColor(mTextColor);
-		
-		int textSize = a.getDimensionPixelOffset(R.styleable.ScrollButton_textSize, 0);
-		if (textSize > 0) {
-			mTextSize = textSize;
-		}
-		a.recycle();
-	}	
+    // the horizontal max distance which tells us whether the active block
+    // needs to move to the other side finally
+    private float mMaxDistToSwitch = 0.0f;
 
-	private void initComponents() {
-		mBound = new RectF();
-		mActiveBound = new RectF();
-		mBkgPaint = new Paint();
-		mBkgPaint.setStyle(Paint.Style.STROKE);
-		mBkgPaint.setAntiAlias(true);
-		mBkgPaint.setColor(Color.GRAY);
+    private Paint mSlideBoardPaint;
 
-		mSlideBoardPaint = new Paint();
-		mSlideBoardPaint.setColor(mTextBkgColor);
-		mSlideBoardPaint.setAntiAlias(true);
-		mSlideBoardPaint.setStyle(Style.FILL_AND_STROKE);
+    private Paint mTextPaint;
 
-		mTextPaint = new Paint();
-		mTextPaint.setColor(mTextColor);
-		mTextPaint.setAntiAlias(true);
-		mTextPaint.setTextSize(mTextSize);
+    private int mTextBkgColor = 0xFFFF0000;
 
-		mRoundRadio = 15.0f;
-		mRoundInnerRadio = 10.0f;
-	}
+    private int mTextColor = 0xFF000000;
 
-	
-	/**property methods**/
-	
-	public void setLeftText(String leftText){
-		mLeftText = leftText;
-	}
-	
-	public void setRightText(String rightText){
-		mRightText = rightText;
-	}
-	
-	public void setFontSize(int txtSize){
-		mTextSize = txtSize;
-	}
-	
-	public void setTextColor(int color){
-		mTextColor = color;
-		if(mTextPaint != null){
-			mTextPaint.setColor(mTextColor);
-		}
-	}
+    private int mTextSize = 26;
 
+    /***
+     * The left text content
+     */
+    private String mLeftText = "Tline";
 
-	@Override
-	protected void onSizeChanged(int w, int h, int oldw, int oldh) {
-		super.onSizeChanged(w, h, oldw, oldh);
+    /***
+     * The right text content
+     */
+    private String mRightText = "Kline";
 
-		mBound.set(0, 0, w, h);
-		mMaxDistToSwitch = Math.max(w /4, 2);
-		mActiveBound.set(w/2, 2, w - 2, h-4);
-		invalidate();
-	}
+    // We can be in one of these states
+    static final int NONE = 0;
 
-	public void setButtonSwitchListener(OnButtonSwitched listener){
-		mListener = listener;
-	}
-	private void notifyChange(int sideId){
-		if(mListener != null){
-			mListener.onSwitch(sideId);
-		}
-	}
+    static final int PRESSED = 1;
 
-	@Override
-	public boolean onTouchEvent(MotionEvent event) {
-		float currX = event.getX();
-		float currY = event.getY();
+    static final int MOVE = 2;
 
-		switch (event.getAction() & MotionEvent.ACTION_MASK) {
-		case MotionEvent.ACTION_DOWN:
-			if(mBound.contains(currX, currY) && !mActiveBound.contains(currX, currY)){
-				// jump immediately
-				if(currX < mBound.width() / 2){
-					mActiveBound.set(2, 2, mBound.width()/2, mBound.height() -4);
-					notifyChange(LEFT);
-				}else{
-					mActiveBound.set(mBound.width()/2, 2, mBound.width()-2, mBound.height() -4);
-					notifyChange(RIGHT);
-				}
-				invalidate();
-			}else{
-				if(!mBound.contains(currX, currY)){
-					mode = NONE;
-					return false;
-				}
-				mode = PRESSED;
-				mStartX = currX;
-				leftSidePressed = mStartX < mBound.width() / 2;	    		 
-			}
-			break;
-		case MotionEvent.ACTION_UP:
-			if(mode == MOVE){
-				mode = NONE;
-				float dlt = Math.abs(currX - mStartX);
-				if(dlt >= mMaxDistToSwitch){
-					// move to the other side
-					if(leftSidePressed)
-						jumpToRightSide();
-					else
-						jumpToLeftSide();	    			  
+    int mode = NONE;
 
-				}else{
-					// move back
-					if(leftSidePressed)
-						jumpToLeftSide();
-					else
-						jumpToRightSide();
-				}
+    private boolean leftSidePressed = false;
 
-			}
-			break;
-		case MotionEvent.ACTION_MOVE:
-			if(mode == PRESSED || mode == MOVE)
-			{
-				float dlt = 0.0f;
-				dlt = Math.abs(currX - mStartX);
-				if(leftSidePressed && currX > mStartX){	    			  
-					if(dlt > 0.5 && dlt <= mBound.width()/2){
-						mActiveBound.set(2 + dlt, 2, mBound.width()/2 + dlt, mBound.height()-4);
-						textSwitched = dlt >= mMaxDistToSwitch ; 
-						invalidate();
-						mode = MOVE;
-					}		    		  
-				}else if(!leftSidePressed && currX < mStartX){
-					if(dlt > 0.5 && dlt <= mBound.width()/2){
-						mActiveBound.set(mBound.width()/2 - dlt, 2, 
-								mBound.width() - 2 - dlt, mBound.height()-4);
-						textSwitched = dlt >= mMaxDistToSwitch ; 
-						invalidate();
-						mode = MOVE;
-					}
-				}	    		  
-			}
-			break;
-		case MotionEvent.ACTION_OUTSIDE:
-			mode = NONE;
-			break;
-		}
+    private boolean textSwitched = false;
 
-		return true;
-	}
+    private float mStartX = 0;
 
-	private void jumpToLeftSide() {
-		mActiveBound.set(2, 2, mBound.width()/2, mBound.height()-4);
-		notifyChange(LEFT);
-		invalidate();
-	}
+    /***
+     * init selected side (0 for left side, 1 for right)
+     */
+    private int mInitSidePosition = 0;
 
-	private void jumpToRightSide() {
-		mActiveBound.set(mBound.width()/2, 2, mBound.width() - 2, mBound.height()-4);
-		notifyChange(RIGHT);
-		invalidate();
-	}
+    /***
+     * vertical space between the inner board and the outside one
+     */
+    private final int verticalBoundInterval = 2;
 
-	@Override
-	protected void onDraw(Canvas canvas) {
-		super.onDraw(canvas);
-		// draw the full bkg first
-		canvas.drawRoundRect(mBound, mRoundRadio, mRoundRadio, mBkgPaint);
-		canvas.drawRoundRect(mActiveBound, mRoundInnerRadio, mRoundInnerRadio, mSlideBoardPaint);
+    public OnButtonSwitched mListener;
 
-		// draw texts
-		mTextPaint.setTextAlign(Paint.Align.LEFT);
-		FontMetricsInt fmi = mTextPaint.getFontMetricsInt();		
+    public ScrollButton(Context context) {
+        super(context);
+        initComponents();
+    }
 
-		float rightTextWidth = mTextPaint.measureText(mRightText);
-		float rightTextXOrg = mBound.width()/2 + (mBound.width()/2 - rightTextWidth)/2;		
-		float leftTextWidth = mTextPaint.measureText(mLeftText);
-		float leftTextXOrg = (mBound.width()/2 - leftTextWidth)/2;		
+    public ScrollButton(Context context, AttributeSet attrs) {
+        super(context, attrs);
 
-		float textYPos = mBound.height() - (fmi.bottom - fmi.ascent);
+        TypedArray a = context.obtainStyledAttributes(attrs, R.styleable.ScrollButton);
+        CharSequence s = a.getString(R.styleable.ScrollButton_leftText);
+        if (s != null) {
+            mLeftText = s.toString();
+        }
+        CharSequence t = a.getString(R.styleable.ScrollButton_rightText);
+        if (t != null) {
+            mRightText = t.toString();
+        }
 
-		if(mode == MOVE ){
-			float newTextXOrg = 0.0f;
-			if(leftSidePressed){
-				if(textSwitched){
-					canvas.drawText(mLeftText, leftTextXOrg, textYPos, mTextPaint);
+        // retrieve the color(s) to be used for this view and apply them.
+        mTextColor = a.getColor(R.styleable.ScrollButton_textColor, 0xFF000000);
+        mTextBkgColor = a.getColor(R.styleable.ScrollButton_selectedBkgColor, 0xFFFF0000);
+        mInitSidePosition = a.getInt(R.styleable.ScrollButton_initSidePosition, 0);
+        int textSize = a.getDimensionPixelOffset(R.styleable.ScrollButton_textSize, 0);
+        if (textSize > 0) {
+            mTextSize = textSize;
+        }
+        a.recycle();
 
-					newTextXOrg = mActiveBound.left + (mActiveBound.width() - rightTextWidth)/2;
-					canvas.drawText(mRightText, newTextXOrg, textYPos, mTextPaint);
-				}else{
-					canvas.drawText(mRightText, rightTextXOrg, textYPos, mTextPaint);
+        initComponents();
+    }
 
-					newTextXOrg = mActiveBound.left + (mActiveBound.width() - leftTextWidth)/2;
-					canvas.drawText(mLeftText, newTextXOrg, textYPos, mTextPaint);
-				}
-			}else{
-				if(textSwitched){
-					canvas.drawText(mRightText, rightTextXOrg, textYPos, mTextPaint);
+    private void initComponents() {
+        mBound = new RectF();
+        mActiveBound = new RectF();
+        mBkgPaint = new Paint();
+        mBkgPaint.setStyle(Paint.Style.STROKE);
+        mBkgPaint.setAntiAlias(true);
+        mBkgPaint.setColor(Color.LTGRAY);
 
-					newTextXOrg = mActiveBound.left + (mActiveBound.width() - leftTextWidth)/2;
-					canvas.drawText(mLeftText, newTextXOrg, textYPos, mTextPaint);
-				}else{
-					canvas.drawText(mLeftText, leftTextXOrg, textYPos, mTextPaint);
+        mSlideBoardPaint = new Paint();
+        mSlideBoardPaint.setColor(mTextBkgColor);
+        mSlideBoardPaint.setAntiAlias(true);
+        mSlideBoardPaint.setStyle(Style.FILL_AND_STROKE);
 
-					newTextXOrg = mActiveBound.left + (mActiveBound.width() - rightTextWidth)/2;
-					canvas.drawText(mRightText, newTextXOrg, textYPos, mTextPaint);
-				}
-			}
-		}else{
-			canvas.drawText(mLeftText, leftTextXOrg, textYPos, mTextPaint);
-			canvas.drawText(mRightText, rightTextXOrg, textYPos, mTextPaint);
-		}
-	}	
+        mTextPaint = new Paint();
+        mTextPaint.setColor(mTextColor);
+        mTextPaint.setAntiAlias(true);
+        mTextPaint.setTextSize(mTextSize);
+
+        mRoundRadio = 15.0f;
+        mRoundInnerRadio = 10.0f;
+    }
+
+    /** property methods **/
+
+    public void setLeftText(String leftText) {
+        mLeftText = leftText;
+        requestLayout();
+        invalidate();
+    }
+
+    public void setRightText(String rightText) {
+        mRightText = rightText;
+        requestLayout();
+        invalidate();
+    }
+
+    public void setFontSize(int txtSize) {
+        mTextSize = txtSize;
+        requestLayout();
+        invalidate();
+    }
+
+    public void setTextColor(int color) {
+        mTextColor = color;
+        if (mTextPaint != null) {
+            mTextPaint.setColor(mTextColor);
+        }
+        invalidate();
+    }
+
+    /***
+     * set initial selected text side
+     * 
+     * @param sideIndex 0 for left; 1 for right
+     */
+    public void setInitialSelectedSide(int sideIndex) {
+        mInitSidePosition = sideIndex;
+        invalidate();
+    }
+
+    @Override
+    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        setMeasuredDimension(measureWidth(widthMeasureSpec), measureHeight(heightMeasureSpec));
+    }
+
+    protected int measureHeight(int heightMeasureSpec) {
+        int result = 0;
+        int specMode = MeasureSpec.getMode(heightMeasureSpec);
+        int specSize = MeasureSpec.getSize(heightMeasureSpec);
+        if (specMode == MeasureSpec.EXACTLY) {
+            result = specSize;
+        } else {
+            int txtHeight = (int) (- mTextPaint.ascent() + mTextPaint.descent());
+            Log.i("ScrollButton", "text height " + txtHeight);
+            result = (int) (getPaddingTop() + getPaddingBottom() + txtHeight);
+            if (specMode == MeasureSpec.AT_MOST) {
+                result = Math.min(result, specSize);
+            }
+        }
+        return result;
+    }
+
+    protected int measureWidth(int widthMeasureSpec) {
+        int result = getSuggestedMinimumWidth();
+
+        int specMode = MeasureSpec.getMode(widthMeasureSpec);
+        int specSize = MeasureSpec.getSize(widthMeasureSpec);
+        if (specMode == MeasureSpec.EXACTLY) {
+            result = specSize;
+        } else {
+            // keep the text-bound padding 0.5x totalTextWidth
+            result = (int) ((mTextPaint.measureText(mLeftText) + mTextPaint.measureText(mRightText)) * 1.5f)
+                    + getPaddingLeft() + getPaddingRight();
+            if (specMode == MeasureSpec.AT_MOST) {
+                result = Math.min(result, specSize);
+            }
+        }
+
+        return result;
+    }
+
+    @Override
+    protected void onSizeChanged(int w, int h, int oldw, int oldh) {
+        super.onSizeChanged(w, h, oldw, oldh);
+
+        mBound.set(0, 0, w, h);
+        mMaxDistToSwitch = Math.max(w / 4, 2);
+        setSliderPosition(w, h, mInitSidePosition == 0);
+        invalidate();
+    }
+
+    /***
+     * set inner rect position
+     * 
+     * @param w the width of outside rect
+     * @param h the height of outside rect
+     * @param onLeftSide true, if the Slider is on the left side; else false.
+     */
+    protected void setSliderPosition(float w, float h, boolean onLeftSide) {
+        if (!onLeftSide)
+            mActiveBound.set(w / 2, verticalBoundInterval, w - 2, h - verticalBoundInterval); // right
+        else
+            mActiveBound.set(2, verticalBoundInterval, w / 2, h - verticalBoundInterval);
+    }
+
+    public void setButtonSwitchListener(OnButtonSwitched listener) {
+        mListener = listener;
+    }
+
+    private void notifyChange(int sideId) {
+        if (mListener != null) {
+            mListener.onSwitch(sideId);
+        }
+    }
+
+    @Override
+    public boolean onTouchEvent(MotionEvent event) {
+        float currX = event.getX();
+        float currY = event.getY();
+
+        switch (event.getAction() & MotionEvent.ACTION_MASK) {
+            case MotionEvent.ACTION_DOWN:
+                if (mBound.contains(currX, currY) && !mActiveBound.contains(currX, currY)) {
+                    // jump immediately
+                    if (currX < mBound.width() / 2) {
+                        setSliderPosition(mBound.width(), mBound.height(), true);
+                        notifyChange(LEFT);
+                    } else {
+                        setSliderPosition(mBound.width(), mBound.height(), false);
+                        notifyChange(RIGHT);
+                    }
+                    invalidate();
+                } else {
+                    if (!mBound.contains(currX, currY)) {
+                        mode = NONE;
+                        return false;
+                    }
+                    mode = PRESSED;
+                    mStartX = currX;
+                    leftSidePressed = mStartX < mBound.width() / 2;
+                }
+                break;
+            case MotionEvent.ACTION_UP:
+                if (mode == MOVE) {
+                    mode = NONE;
+                    float dlt = Math.abs(currX - mStartX);
+                    if (dlt >= mMaxDistToSwitch) {
+                        // move to the other side
+                        if (leftSidePressed)
+                            jumpToRightSide();
+                        else
+                            jumpToLeftSide();
+
+                    } else {
+                        // move back
+                        if (leftSidePressed)
+                            jumpToLeftSide();
+                        else
+                            jumpToRightSide();
+                    }
+
+                }
+                break;
+            case MotionEvent.ACTION_MOVE:
+                if (mode == PRESSED || mode == MOVE) {
+                    float dlt = 0.0f;
+                    dlt = Math.abs(currX - mStartX);
+                    if (leftSidePressed && currX > mStartX) {
+                        if (dlt > 0.5 && dlt <= mBound.width() / 2) {
+                            mActiveBound.set(2 + dlt, 2, mBound.width() / 2 + dlt,
+                                    mBound.height() - 2);
+                            textSwitched = dlt >= mMaxDistToSwitch;
+                            invalidate();
+                            mode = MOVE;
+                        }
+                    } else if (!leftSidePressed && currX < mStartX) {
+                        if (dlt > 0.5 && dlt <= mBound.width() / 2) {
+                            mActiveBound.set(mBound.width() / 2 - dlt, 2, mBound.width() - 2 - dlt,
+                                    mBound.height() - 2);
+                            textSwitched = dlt >= mMaxDistToSwitch;
+                            invalidate();
+                            mode = MOVE;
+                        }
+                    }
+                }
+                break;
+            case MotionEvent.ACTION_OUTSIDE:
+                mode = NONE;
+                break;
+        }
+
+        return true;
+    }
+
+    private void jumpToLeftSide() {
+        setSliderPosition(mBound.width(), mBound.height(), true);
+        notifyChange(LEFT);
+        invalidate();
+    }
+
+    private void jumpToRightSide() {
+        setSliderPosition(mBound.width(), mBound.height(), false);
+        notifyChange(RIGHT);
+        invalidate();
+    }
+
+    @Override
+    protected void onDraw(Canvas canvas) {
+        super.onDraw(canvas);
+
+        // draw the full bkg first
+        canvas.drawRoundRect(mBound, mRoundRadio, mRoundRadio, mBkgPaint);
+        canvas.drawRoundRect(mActiveBound, mRoundInnerRadio, mRoundInnerRadio, mSlideBoardPaint);
+
+        // draw texts
+        mTextPaint.setTextAlign(Paint.Align.LEFT);
+
+        float rightTextWidth = mTextPaint.measureText(mRightText);
+        float rightTextXOrg = mBound.width() / 2 + (mBound.width() / 2 - rightTextWidth) / 2;
+        float leftTextWidth = mTextPaint.measureText(mLeftText);
+        float leftTextXOrg = (mBound.width() / 2 - leftTextWidth) / 2;
+
+        float textYPos = getPaddingTop() - mTextPaint.ascent();
+
+        //Log.i("ScrollButton", "{txtYPos:Top:Bottom }" + textYPos + ":" + getTop() + ":" + getBottom());
+        if (mode == MOVE) {
+            float newTextXOrg = 0.0f;
+            if (leftSidePressed) {
+                if (textSwitched) {
+                    canvas.drawText(mLeftText, leftTextXOrg, textYPos, mTextPaint);
+
+                    newTextXOrg = mActiveBound.left + (mActiveBound.width() - rightTextWidth) / 2;
+                    canvas.drawText(mRightText, newTextXOrg, textYPos, mTextPaint);
+                } else {
+                    canvas.drawText(mRightText, rightTextXOrg, textYPos, mTextPaint);
+
+                    newTextXOrg = mActiveBound.left + (mActiveBound.width() - leftTextWidth) / 2;
+                    canvas.drawText(mLeftText, newTextXOrg, textYPos, mTextPaint);
+                }
+            } else {
+                if (textSwitched) {
+                    canvas.drawText(mRightText, rightTextXOrg, textYPos, mTextPaint);
+
+                    newTextXOrg = mActiveBound.left + (mActiveBound.width() - leftTextWidth) / 2;
+                    canvas.drawText(mLeftText, newTextXOrg, textYPos, mTextPaint);
+                } else {
+                    canvas.drawText(mLeftText, leftTextXOrg, textYPos, mTextPaint);
+
+                    newTextXOrg = mActiveBound.left + (mActiveBound.width() - rightTextWidth) / 2;
+                    canvas.drawText(mRightText, newTextXOrg, textYPos, mTextPaint);
+                }
+            }
+        } else {
+            canvas.drawText(mLeftText, leftTextXOrg, textYPos, mTextPaint);
+            canvas.drawText(mRightText, rightTextXOrg, textYPos, mTextPaint);
+        }
+    }
 
 }
