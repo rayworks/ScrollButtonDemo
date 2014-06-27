@@ -11,6 +11,7 @@
         android:text="@string/hello" />
 
     <com.spzone.android.ctrl.ScrollButton
+        android:background="@drawable/default_bkg_shape"
         android:id="@+id/scroll_button"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"

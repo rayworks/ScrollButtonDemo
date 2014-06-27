@@ -363,8 +363,11 @@ public class ScrollButton extends View {
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
 
-        // draw the full bkg first
-        canvas.drawRoundRect(mBound, mRoundRadio, mRoundRadio, mBkgPaint);
+        // respect customized background 
+        if(getBackground() == null){
+	        // draw the full bkg
+	        canvas.drawRoundRect(mBound, mRoundRadio, mRoundRadio, mBkgPaint);
+        }
         canvas.drawRoundRect(mActiveBound, mRoundInnerRadio, mRoundInnerRadio, mSlideBoardPaint);
 
         // draw texts
